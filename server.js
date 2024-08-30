@@ -3,17 +3,16 @@ const app = express();
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const pgp = require('pg-promise')();
+require('dotenv').config();
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
 
+const db = pgp(process.env.DATABASE_URL);
 
-const db = pgp('postgres://postgres:death373@localhost:5432/bookstore');
-app.use(cors({
-    origin: 'https://your-frontend-domain.com'
-}));
+app.use(cors());
 app.use(bodyParser.json());
 
 // Get all books
