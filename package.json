@@ -1,14 +1,15 @@
 {
   "name": "bookstore",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
+  "author": "Your Name",
   "license": "ISC",
-  "description": "",
+  "description": "A bookstore web application",
   "dependencies": {
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
