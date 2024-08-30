@@ -3,7 +3,7 @@ const app = express();
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const pgp = require('pg-promise')();
-const PORT = 10000;
+const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
