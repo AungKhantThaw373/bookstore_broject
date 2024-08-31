@@ -13,7 +13,9 @@ app.listen(PORT, () => {
 
 const db = pgp(process.env.DATABASE_URL);
 
-app.use(cors());
+app.use(cors({
+    origin: 'http://localhost:3000' // Replace with your React app's URL
+}));
 app.use(bodyParser.json());
 
 // Get all books
@@ -28,7 +30,9 @@ app.get('/api/books', async (req, res) => {
             title: book.title,
             author: book.author,
             genre: book.genre,
-            price: parseFloat(book.price).toFixed(2) // Ensure price is a float and formatted
+            price: parseFloat(book.price).toFixed(2), // Ensure price is a float and formatted
+            image_url: book.image_url,
+            description: book.description
         }));
 
         res.json(formattedBooks);
@@ -36,7 +40,6 @@ app.get('/api/books', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-
 
 // Get book by ID
 app.get('/api/books/:isbn', async (req, res) => {
@@ -49,14 +52,13 @@ app.get('/api/books/:isbn', async (req, res) => {
     }
 });
 
-
 // Add a new book
 app.post('/api/books', async (req, res) => {
-    const { isbn, title, author, genre, price } = req.body;
+    const { isbn, title, author, genre, price, image_url, description } = req.body;
     try {
         const newBook = await db.one(
-            'INSERT INTO books (isbn, title, author, genre, price) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-            [isbn, title, author, genre, price]
+            'INSERT INTO books (isbn, title, author, genre, price, image_url, description) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            [isbn, title, author, genre, price, image_url, description]
         );
         res.status(201).json(newBook);
     } catch (err) {
@@ -85,8 +87,8 @@ app.post('/api/books/bulk', async (req, res) => {
         await db.tx(async (t) => {
             for (const book of books) {
                 await t.none(
-                    'INSERT INTO books (isbn, title, author, genre, price) VALUES ($1, $2, $3, $4, $5)',
-                    [book.isbn, book.title, book.author, book.genre, book.price]
+                    'INSERT INTO books (isbn, title, author, genre, price, image_url, description) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                    [book.isbn, book.title, book.author, book.genre, book.price, book.image_url, book.description]
                 );
             }
         });
@@ -97,16 +99,14 @@ app.post('/api/books/bulk', async (req, res) => {
     }
 });
 
-
-
 // Update an existing book
 app.put('/api/books/:id', async (req, res) => {
     const { id } = req.params;
-    const { title, author, genre, price } = req.body;
+    const { title, author, genre, price, image_url, description } = req.body;
     try {
         const updatedBook = await db.one(
-            'UPDATE books SET title = $1, author = $2, genre = $3, price = $4 WHERE id = $5 RETURNING *',
-            [title, author, genre, price, id]
+            'UPDATE books SET title = $1, author = $2, genre = $3, price = $4, image_url = $5, description = $6 WHERE id = $7 RETURNING *',
+            [title, author, genre, price, image_url, description, id]
         );
         res.json(updatedBook);
     } catch (err) {
@@ -125,7 +125,7 @@ app.delete('/api/books/:id', async (req, res) => {
     }
 });
 
-//Delete multiple books
+// Delete multiple books
 app.post('/api/books/multiple', async (req, res) => {
     const { ids } = req.body;
 
@@ -133,7 +133,6 @@ app.post('/api/books/multiple', async (req, res) => {
     if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ error: 'Invalid input: Expected an array of book IDs' });
     }
-
 
     try {
         // Convert all IDs to integers
@@ -143,7 +142,6 @@ app.post('/api/books/multiple', async (req, res) => {
         if (integerIds.some(isNaN)) {
             return res.status(400).json({ error: 'Invalid input: All IDs must be integers' });
         }
-
 
         // Delete books using the ANY() clause with an integer array
         await db.none('DELETE FROM books WHERE id = ANY($1::int[])', [integerIds]);
@@ -166,10 +164,10 @@ app.delete('/api/books', async (req, res) => {
     }
 });
 
-
 // Cart operations
 let cart = [];
-//Add to cart
+
+// Add to cart
 app.post('/api/cart', (req, res) => {
     const { bookId, quantity } = req.body;
     const book = cart.find((item) => item.bookId === bookId);
@@ -181,12 +179,12 @@ app.post('/api/cart', (req, res) => {
     res.json(cart);
 });
 
-//Display cart
+// Display cart
 app.get('/api/cart', (req, res) => {
     res.json(cart);
 });
 
-//Order by user
+// Order by user
 app.post('/api/order', async (req, res) => {
     const { userId } = req.body; // Assuming user is logged in
 
@@ -217,8 +215,6 @@ app.post('/api/order', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-
-
 
 // Search books
 app.get('/api/search', async (req, res) => {
@@ -262,39 +258,39 @@ app.get('/api/search', async (req, res) => {
     }
 });
 
-//Advanced search
+// Advanced search
 app.get('/api/advanced-search', async (req, res) => {
     const { title, author, genre, minPrice, maxPrice } = req.query;
-    let sqlQuery = 'SELECT * FROM books WHERE 1=1';
+    let query = 'SELECT * FROM books WHERE 1=1';
     const params = [];
 
     if (title) {
-        sqlQuery += ` AND title ILIKE $${params.length + 1}`;
+        query += ` AND title ILIKE $${params.length + 1}`;
         params.push(`%${title}%`);
     }
 
     if (author) {
-        sqlQuery += ` AND author ILIKE $${params.length + 1}`;
+        query += ` AND author ILIKE $${params.length + 1}`;
         params.push(`%${author}%`);
     }
 
     if (genre) {
-        sqlQuery += ` AND genre = $${params.length + 1}`;
-        params.push(genre);
+        query += ` AND genre ILIKE $${params.length + 1}`;
+        params.push(`%${genre}%`);
     }
 
     if (minPrice) {
-        sqlQuery += ` AND price >= $${params.length + 1}`;
+        query += ` AND price >= $${params.length + 1}`;
         params.push(parseFloat(minPrice));
     }
 
     if (maxPrice) {
-        sqlQuery += ` AND price <= $${params.length + 1}`;
+        query += ` AND price <= $${params.length + 1}`;
         params.push(parseFloat(maxPrice));
     }
 
     try {
-        const books = await db.any(sqlQuery, params);
+        const books = await db.any(query, params);
         res.json(books);
     } catch (err) {
         res.status(500).json({ error: err.message });
