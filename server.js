@@ -7,9 +7,22 @@ const bodyParser = require('body-parser');
 const pgp = require('pg-promise')();
 const jwt = require('jsonwebtoken');
 const PORT = process.env.PORT || 10000;
+const multer = require('multer');
+const streamifier = require('streamifier');
+const cloudinary = require('cloudinary').v2;
 
+// Cloudinary configuration
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
+    console.log(process.env.CLOUDINARY_API_SECRET)
 });
 
 const db = pgp(process.env.DATABASE_URL);
@@ -46,7 +59,6 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-
 //Register
 app.post('/api/register', async (req, res) => {
     const { username, email, password } = req.body;
@@ -82,7 +94,6 @@ app.post('/api/register', async (req, res) => {
 
 
 //Login
-// server.js
 app.post('/api/login', async (req, res) => {
     const { identifier, password } = req.body;
 
@@ -116,6 +127,7 @@ app.get('/api/users', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
 //get user
 app.get('/api/user', authenticateToken, async (req, res) => {
     try {
@@ -140,6 +152,43 @@ app.get('/api/user', authenticateToken, async (req, res) => {
     }
 });
 
+//Update profile
+app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), async (req, res) => {
+    const { username, email, currentPassword, newPassword } = req.body;
+
+    try {
+        let profilePicUrl = null;
+
+        if (req.file) {
+            const stream = cloudinary.uploader.upload_stream(
+                { folder: 'profile_pictures' },
+                async (error, result) => {
+                    if (error) return res.status(500).json({ error: 'Cloudinary upload failed' });
+                    profilePicUrl = result.secure_url;
+
+                    // Update the user in the database
+                    await db.none(
+                        `UPDATE userz SET username=$1, email=$2, profile_pic_url=$3 WHERE id=$4`,
+                        [username, email, profilePicUrl, req.user.id]
+                    );
+
+                    return res.json({ username, email, profile_pic_url: profilePicUrl });
+                }
+            );
+            streamifier.createReadStream(req.file.buffer).pipe(stream);
+        } else {
+            // Update without changing profile picture
+            await db.none(
+                `UPDATE userz SET username=$1, email=$2 WHERE id=$3`,
+                [username, email, req.user.id]
+            );
+
+            return res.json({ username, email });
+        }
+    } catch (err) {
+        res.status(500).json({ error: 'Profile update failed' });
+    }
+});
 
 // Get books
 app.get('/api/books', async (req, res) => {
@@ -420,5 +469,3 @@ app.get('/api/filter', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-
-
