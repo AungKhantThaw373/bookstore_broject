@@ -163,7 +163,10 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
             const stream = cloudinary.uploader.upload_stream(
                 { folder: 'profile_pictures' },
                 async (error, result) => {
-                    if (error) return res.status(500).json({ error: 'Cloudinary upload failed' });
+                    if (error) {
+    console.error('Cloudinary upload failed:', error);
+    return res.status(500).json({ error: 'Cloudinary upload failed' });
+  }
                     profilePicUrl = result.secure_url;
 
                     // Update the user in the database
