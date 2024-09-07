@@ -5,6 +5,7 @@ const app = express();
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const pgp = require('pg-promise')();
+const jwt = require('jsonwebtoken');
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
@@ -13,12 +14,134 @@ app.listen(PORT, () => {
 
 const db = pgp(process.env.DATABASE_URL);
 
+const allowedOrigins = ['http://localhost:5174', 'https://web-project-07u1.onrender.com']; // Add multiple origins here
+
 app.use(cors({
-    origin: 'http://localhost:3000' // Replace with your React app's URL
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true // Ensure credentials is outside of the origin function
 }));
+
 app.use(bodyParser.json());
 
-// Get all books
+// Authenticate Token Middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Extract Bearer token
+
+    if (!token) return res.sendStatus(401);
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+    });
+};
+
+
+//Register
+app.post('/api/register', async (req, res) => {
+    const { username, email, password } = req.body;
+
+    try {
+        // Define a list of admin usernames
+        const adminUsernames = ['Admin1', 'Admin2', 'Admin3']; // Add your admin usernames here
+
+        // Check if the username or email already exists
+        const existingUser = await db.oneOrNone(
+            'SELECT * FROM userz WHERE username = $1 OR email = $2',
+            [username, email]
+        );
+
+        if (existingUser) {
+            return res.status(400).json({ error: 'Username or email already in use' });
+        }
+
+        // Determine user role
+        const role = adminUsernames.includes(username) ? 'admin' : 'user';
+
+        // Insert new user
+        const newUser = await db.one(
+            'INSERT INTO userz (username, email, password, role) VALUES ($1, $2, $3, $4) RETURNING *',
+            [username, email, password, role] // Make sure to hash the password before storing
+        );
+
+        res.status(201).json(newUser);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+//Login
+// server.js
+app.post('/api/login', async (req, res) => {
+    const { identifier, password } = req.body;
+
+    try {
+        // Find user by username or email
+        const user = await db.oneOrNone(
+            'SELECT * FROM userz WHERE username = $1 OR email = $2',
+            [identifier, identifier]
+        );
+
+        if (!user || user.password !== password) { // Use hashed passwords in production
+            return res.status(401).json({ error: 'Invalid username/email or password' });
+        }
+
+        // Generate JWT token
+        const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET);
+
+        res.json({ token });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+//get users
+app.get('/api/users', async (req, res) => {
+    try {
+        const users = await db.any('SELECT * FROM userz');
+
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+//get user
+app.get('/api/user', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // Query the database to get user details
+        const user = await db.oneOrNone('SELECT * FROM userz WHERE id = $1', [userId]);
+
+        if (user) {
+            return res.json({
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                role: user.role,
+                // Include any other fields you need
+            });
+        } else {
+            return res.status(404).json({ error: 'User not found' });
+        }
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+
+// Get books
 app.get('/api/books', async (req, res) => {
     try {
         const books = await db.any('SELECT * FROM books');
@@ -28,11 +151,12 @@ app.get('/api/books', async (req, res) => {
             id: book.id,
             isbn: book.isbn,
             title: book.title,
-            author: book.author,
-            genre: book.genre,
+            author: book.author.join(', '), // Convert array to string
+            genre: book.genre.join(', '), // Convert array to string
             price: parseFloat(book.price).toFixed(2), // Ensure price is a float and formatted
             image_url: book.image_url,
-            description: book.description
+            description: book.description,
+            username: book.username // Include the username
         }));
 
         res.json(formattedBooks);
@@ -41,11 +165,13 @@ app.get('/api/books', async (req, res) => {
     }
 });
 
-// Get book by ID
-app.get('/api/books/:isbn', async (req, res) => {
-    const { isbn } = req.params;
+// Get book by ISBN
+app.get('/api/books/:id', async (req, res) => {
+    const { id } = req.params;
     try {
-        const book = await db.one('SELECT * FROM books WHERE isbn = $1', [isbn]);
+        const book = await db.one('SELECT * FROM books WHERE id = $1', [id]);
+        book.author = book.author.join(', ');
+        book.genre = book.genre.join(', ');
         res.json(book);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -55,10 +181,12 @@ app.get('/api/books/:isbn', async (req, res) => {
 // Add a new book
 app.post('/api/books', async (req, res) => {
     const { isbn, title, author, genre, price, image_url, description } = req.body;
+    const username = req.body.username ? req.body.username : 'Admin'; // Default to 'Admin' if username is not available
     try {
         const newBook = await db.one(
-            'INSERT INTO books (isbn, title, author, genre, price, image_url, description) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-            [isbn, title, author, genre, price, image_url, description]
+            `INSERT INTO books (isbn, title, author, genre, price, image_url, description, username)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [isbn, title, author, genre, price, image_url, description, username]
         );
         res.status(201).json(newBook);
     } catch (err) {
@@ -66,9 +194,11 @@ app.post('/api/books', async (req, res) => {
     }
 });
 
+
 // Add multiple books
-app.post('/api/books/bulk', async (req, res) => {
+app.post('/api/books/bulk', authenticateToken, async (req, res) => {
     const books = req.body;
+    const username = req.user ? req.user.username : 'Admin'; // Default to 'Admin' if username is not available
 
     // Validate that the books array is provided and is an array
     if (!Array.isArray(books)) {
@@ -87,8 +217,8 @@ app.post('/api/books/bulk', async (req, res) => {
         await db.tx(async (t) => {
             for (const book of books) {
                 await t.none(
-                    'INSERT INTO books (isbn, title, author, genre, price, image_url, description) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-                    [book.isbn, book.title, book.author, book.genre, book.price, book.image_url, book.description]
+                    'INSERT INTO books (isbn, title, author, genre, price, image_url, description, username) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+                    [book.isbn, book.title, book.author, book.genre, book.price, book.image_url, book.description, username]
                 );
             }
         });
@@ -164,57 +294,6 @@ app.delete('/api/books', async (req, res) => {
     }
 });
 
-// Cart operations
-let cart = [];
-
-// Add to cart
-app.post('/api/cart', (req, res) => {
-    const { bookId, quantity } = req.body;
-    const book = cart.find((item) => item.bookId === bookId);
-    if (book) {
-        book.quantity += quantity;
-    } else {
-        cart.push({ bookId, quantity });
-    }
-    res.json(cart);
-});
-
-// Display cart
-app.get('/api/cart', (req, res) => {
-    res.json(cart);
-});
-
-// Order by user
-app.post('/api/order', async (req, res) => {
-    const { userId } = req.body; // Assuming user is logged in
-
-    try {
-        // Check if the user exists
-        const user = await db.oneOrNone('SELECT * FROM users WHERE id = $1', [userId]);
-
-        if (!user) {
-            return res.status(400).json({ error: 'User not found' });
-        }
-
-        // Calculate the total price of the cart
-        const total = cart.reduce((acc, item) => {
-            return acc + (item.quantity * (item.price || 0));
-        }, 0);
-
-        // Insert the order into the database
-        const order = await db.one(
-            'INSERT INTO orders (user_id, total) VALUES ($1, $2) RETURNING *',
-            [userId, total]
-        );
-
-        // Clear the cart after placing the order
-        cart = [];
-
-        res.status(201).json(order);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
 
 // Search books
 app.get('/api/search', async (req, res) => {
@@ -297,23 +376,21 @@ app.get('/api/advanced-search', async (req, res) => {
     }
 });
 
-// Filter books
+// Filter books by genre, author, and price range
 app.get('/api/filter', async (req, res) => {
     const { genre, author, minPrice, maxPrice } = req.query;
 
-    // Start building the SQL query
     let sqlQuery = 'SELECT * FROM books WHERE 1=1';
     const params = [];
 
-    // Add conditions based on the presence of query parameters
     if (genre) {
-        sqlQuery += ` AND genre = $${params.length + 1}`;
+        sqlQuery += ` AND $1 = ANY(genre)`;
         params.push(genre);
     }
 
     if (author) {
-        sqlQuery += ` AND author ILIKE $${params.length + 1}`;
-        params.push(`%${author}%`);
+        sqlQuery += ` AND $2 = ANY(author)`;
+        params.push(author);
     }
 
     if (minPrice) {
@@ -328,12 +405,20 @@ app.get('/api/filter', async (req, res) => {
 
     try {
         const books = await db.any(sqlQuery, params);
-        res.json(books);
+        const formattedBooks = books.map(book => ({
+            id: book.id,
+            isbn: book.isbn,
+            title: book.title,
+            author: book.author.join(', '),
+            genre: book.genre.join(', '),
+            price: parseFloat(book.price).toFixed(2),
+            image_url: book.image_url,
+            description: book.description
+        }));
+        res.json(formattedBooks);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
-
-
 
 
