@@ -166,18 +166,22 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
                 { folder: 'profile_pictures' },
                 async (error, result) => {
                     if (error) {
-    console.error('Cloudinary upload failed:', error);
-    return res.status(500).json({ error: 'Cloudinary upload failed' });
-  }
+                        console.error('Cloudinary upload failed:', error);
+                        return res.status(500).json({ error: 'Cloudinary upload failed' });
+                    }
                     profilePicUrl = result.secure_url;
 
-                    // Update the user in the database
-                    await db.none(
-                        `UPDATE userz SET username=$1, email=$2, profile_pic_url=$3 WHERE id=$4`,
-                        [username, email, profilePicUrl, req.user.id]
-                    );
-
-                    return res.json({ username, email, profile_pic_url: profilePicUrl });
+                    try {
+                        // Update user's profile picture in the database
+                        await db.none(
+                            `UPDATE userz SET username=$1, email=$2, profile_pic_url=$3 WHERE id=$4`,
+                            [username, email, profilePicUrl, req.user.id]
+                        );
+                        return res.json({ username, email, profile_pic_url: profilePicUrl });
+                    } catch (dbError) {
+                        console.error('Database update failed:', dbError);
+                        return res.status(500).json({ error: 'Failed to update profile in database' });
+                    }
                 }
             );
             streamifier.createReadStream(req.file.buffer).pipe(stream);
@@ -187,13 +191,14 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
                 `UPDATE userz SET username=$1, email=$2 WHERE id=$3`,
                 [username, email, req.user.id]
             );
-
             return res.json({ username, email });
         }
     } catch (err) {
+        console.error('Profile update failed:', err);
         res.status(500).json({ error: 'Profile update failed' });
     }
 });
+
 
 // Get books
 app.get('/api/books', async (req, res) => {
