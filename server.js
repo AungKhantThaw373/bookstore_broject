@@ -163,7 +163,7 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
 
         if (req.file) {
             const stream = cloudinary.uploader.upload_stream(
-                { folder: 'profile_pictures' },
+                { folder: 'profile_pictures' ,upload_preset: 'ouum5xwe'},
                 async (error, result) => {
                     if (error) {
                         console.error('Cloudinary upload failed:', error);
