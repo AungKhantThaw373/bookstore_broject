@@ -155,44 +155,17 @@ app.get('/api/user', authenticateToken, async (req, res) => {
 });
 
 //Update profile
-app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), async (req, res) => {
-    const { username, email, currentPassword, newPassword } = req.body;
+app.put('/api/profile/update', authenticateToken, async (req, res) => {
+    const { username, email, profilePicUrl } = req.body;
 
     try {
-        let profilePicUrl = null;
+        // Update the user in the database
+        await db.none(
+            `UPDATE userz SET username=$1, email=$2, profile_pic_url=$3 WHERE id=$4`,
+            [username, email, profilePicUrl, req.user.id]
+        );
 
-        if (req.file) {
-            const stream = cloudinary.uploader.upload_stream(
-                { folder: 'profile_pictures' ,upload_preset: 'ouum5xwe'},
-                async (error, result) => {
-                    if (error) {
-                        console.error('Cloudinary upload failed:', error);
-                        return res.status(500).json({ error: 'Cloudinary upload failed' });
-                    }
-                    profilePicUrl = result.secure_url;
-
-                    try {
-                        // Update user's profile picture in the database
-                        await db.none(
-                            `UPDATE userz SET username=$1, email=$2, profile_pic_url=$3 WHERE id=$4`,
-                            [username, email, profilePicUrl, req.user.id]
-                        );
-                        return res.json({ username, email, profile_pic_url: profilePicUrl });
-                    } catch (dbError) {
-                        console.error('Database update failed:', dbError);
-                        return res.status(500).json({ error: 'Failed to update profile in database' });
-                    }
-                }
-            );
-            streamifier.createReadStream(req.file.buffer).pipe(stream);
-        } else {
-            // Update without changing profile picture
-            await db.none(
-                `UPDATE userz SET username=$1, email=$2 WHERE id=$3`,
-                [username, email, req.user.id]
-            );
-            return res.json({ username, email });
-        }
+        return res.json({ success: true, username, email, profile_pic_url: profilePicUrl });
     } catch (err) {
         console.error('Profile update failed:', err);
         res.status(500).json({ error: 'Profile update failed' });
