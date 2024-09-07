@@ -22,6 +22,8 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
+    console.log(process.env.CLOUDINARY_CLOUD_NAME)
+    console.log(process.env.CLOUDINARY_API_KEY)
     console.log(process.env.CLOUDINARY_API_SECRET)
 });
 
