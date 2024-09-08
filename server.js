@@ -162,7 +162,10 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
     if (!req.user || !req.user.id) {
         return res.status(401).json({ error: 'User not authenticated' });
     }
+    
     const { username, email, currentPassword, newPassword } = req.body;
+
+    console.log('Request Body:', { username, email, currentPassword, newPassword }); // Log the request body
 
     try {
         let profilePicUrl = null;
@@ -171,6 +174,8 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
             // Convert Buffer to Base64
             const base64Image = req.file.buffer.toString('base64');
             const mimeType = req.file.mimetype; // e.g., image/jpeg
+
+            console.log('Image File:', { base64Image, mimeType }); // Log the image file details
 
             // Use Cloudinary unsigned upload
             const result = await new Promise((resolve, reject) => {
@@ -187,9 +192,14 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
 
             if (result && result.secure_url) {
                 profilePicUrl = result.secure_url;
+                console.log('Cloudinary Result:', result); // Log Cloudinary result
             } else {
                 throw new Error('Image upload failed');
             }
+        } else {
+            // If no new image is uploaded, use the existing profile picture URL if provided
+            profilePicUrl = req.body.profile_pic_url || null;
+            console.log('No new image uploaded. Using existing profile picture URL:', profilePicUrl);
         }
 
         // Update user profile in the database
@@ -204,10 +214,11 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
             profile_pic_url: profilePicUrl,
         });
     } catch (err) {
-        console.error('Profile update error:', err);
+        console.error('Profile update error:', err); // Log errors
         res.status(500).json({ error: 'Profile update failed' });
     }
 });
+
 
 // Get books
 app.get('/api/books', async (req, res) => {
