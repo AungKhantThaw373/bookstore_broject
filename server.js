@@ -162,21 +162,27 @@ app.put('/api/profile/update', upload.single('profile_pic'), async (req, res) =>
         let profilePicUrl = null;
 
         if (req.file) {
-            // Convert Buffer to Stream using streamifier
-            const stream = cloudinary.uploader.unsigned_upload(
-                streamifier.createReadStream(req.file.buffer),
-                'ouum5xwe'
-            );
+            // Convert Buffer to Stream
+            const stream = streamifier.createReadStream(req.file.buffer);
 
-            // Handle the stream
+            // Use Cloudinary unsigned upload
             const result = await new Promise((resolve, reject) => {
-                stream
-                    .on('error', reject)
-                    .on('finish', resolve)
-                    .end(req.file.buffer);
+                cloudinary.uploader.unsigned_upload(
+                    stream,
+                    'your-upload-preset',
+                    { resource_type: 'image' },
+                    (error, result) => {
+                        if (error) return reject(error);
+                        resolve(result);
+                    }
+                );
             });
 
-            profilePicUrl = result.secure_url;
+            if (result && result.secure_url) {
+                profilePicUrl = result.secure_url;
+            } else {
+                throw new Error('Image upload failed');
+            }
         }
 
         // Update user profile in the database
@@ -195,8 +201,6 @@ app.put('/api/profile/update', upload.single('profile_pic'), async (req, res) =>
         res.status(500).json({ error: 'Profile update failed' });
     }
 });
-
-app.listen(3000, () => console.log('Server running on port 3000'));
 
 // Get books
 app.get('/api/books', async (req, res) => {
