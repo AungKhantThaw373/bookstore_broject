@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const PORT = process.env.PORT || 10000;
 const multer = require('multer');
 const streamifier = require('streamifier');
+const { Readable } = require('stream');
 const cloudinary = require('cloudinary').v2;
 
 // Cloudinary configuration
@@ -162,22 +163,20 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
         let profilePicUrl = null;
 
         if (req.file) {
-            try {
-                // Create a FormData object
-                const formData = new FormData();
-                formData.append('file', req.file.buffer, 'profile_pic'); // Append buffer as a file
-                formData.append('upload_preset', 'ouum5xwe'); // Your unsigned upload preset
+            const bufferStream = new Readable();
+            bufferStream.push(req.file.buffer);
+            bufferStream.push(null);
 
-                // Send the FormData object to Cloudinary
-                const uploadRes = await fetch('https://api.cloudinary.com/v1_1/dyvms5hlw/image/upload', {
-                    method: 'POST',
-                    body: formData,
+            try {
+                const result = await new Promise((resolve, reject) => {
+                    cloudinary.uploader.unsigned_upload(bufferStream, 'ouum5xwe', (error, result) => {
+                        if (error) return reject(error);
+                        resolve(result);
+                    });
                 });
-                
-                const uploadData = await uploadRes.json();
-                
-                if (uploadData.secure_url) {
-                    profilePicUrl = uploadData.secure_url;
+
+                if (result.secure_url) {
+                    profilePicUrl = result.secure_url;
                 } else {
                     throw new Error('Image upload failed');
                 }
