@@ -172,8 +172,9 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
                     { folder: 'profile_pictures' },
                     (error, result) => {
                         if (error) {
-                            reject(error);
-                        } else {
+                        console.error('Cloudinary upload error:', error);
+                        return res.status(500).json({ error: 'Cloudinary upload failed' });
+                        }else {
                             resolve(result);
                         }
                     }
