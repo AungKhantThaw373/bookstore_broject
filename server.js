@@ -281,7 +281,7 @@ app.post('/api/books', async (req, res) => {
 
 
 // Add multiple books
-app.post('/api/books/bulk', authenticateToken, async (req, res) => {
+app.post('/api/books/bulk', async (req, res) => {
     const books = req.body;
     const username = req.user ? req.user.username : 'Admin'; // Default to 'Admin' if username is not available
 
