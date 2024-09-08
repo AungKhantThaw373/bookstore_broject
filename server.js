@@ -156,7 +156,7 @@ app.get('/api/user', authenticateToken, async (req, res) => {
 });
 
 //Update profile
-app.put('/api/profile/update', upload.single('profile_pic'), async (req, res) => {
+app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), async (req, res) => {
     console.log('Authenticated User:', req.user); // Debug log
 
     if (!req.user || !req.user.id) {
