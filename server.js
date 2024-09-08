@@ -145,6 +145,7 @@ app.get('/api/user', authenticateToken, async (req, res) => {
                 username: user.username,
                 email: user.email,
                 role: user.role,
+                profilePicUrl: user.profile_pic_url
                 // Include any other fields you need
             });
         } else {
