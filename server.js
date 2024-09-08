@@ -162,12 +162,27 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
         let profilePicUrl = null;
 
         if (req.file) {
-            // Use Cloudinary unsigned upload method
             try {
-                const uploadRes = await cloudinary.uploader.unsigned_upload(req.file.buffer, 'ouum5xwe');
-                profilePicUrl = uploadRes.secure_url;
+                // Create a FormData object
+                const formData = new FormData();
+                formData.append('file', req.file.buffer, 'profile_pic'); // Append buffer as a file
+                formData.append('upload_preset', 'ouum5xwe'); // Your unsigned upload preset
+
+                // Send the FormData object to Cloudinary
+                const uploadRes = await fetch('https://api.cloudinary.com/v1_1/dyvms5hlw/image/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+                
+                const uploadData = await uploadRes.json();
+                
+                if (uploadData.secure_url) {
+                    profilePicUrl = uploadData.secure_url;
+                } else {
+                    throw new Error('Image upload failed');
+                }
             } catch (uploadError) {
-                console.error('Cloudinary unsigned upload error:', uploadError);
+                console.error('Cloudinary upload error:', uploadError);
                 return res.status(500).json({ error: 'Cloudinary upload failed' });
             }
         } else {
