@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const PORT = process.env.PORT || 10000;
 const multer = require('multer');
 const streamifier = require('streamifier');
+const { Buffer } = require('buffer');
 const cloudinary = require('cloudinary').v2;
 
 // Cloudinary configuration
