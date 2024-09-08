@@ -155,21 +155,6 @@ app.get('/api/user', authenticateToken, async (req, res) => {
 });
 
 //Update profile
-const express = require('express');
-const multer = require('multer');
-const streamifier = require('streamifier');
-const cloudinary = require('cloudinary').v2;
-
-const app = express();
-const upload = multer();
-
-// Configure Cloudinary
-cloudinary.config({
-    cloud_name: 'your-cloud-name',
-    api_key: 'your-api-key',
-    api_secret: 'your-api-secret',
-});
-
 app.put('/api/profile/update', upload.single('profile_pic'), async (req, res) => {
     const { username, email, currentPassword, newPassword } = req.body;
 
