@@ -91,6 +91,7 @@ app.post('/api/register', async (req, res) => {
 
         res.status(201).json(newUser);
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -116,6 +117,7 @@ app.post('/api/login', async (req, res) => {
 
         res.json({ token });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: err.message });
     }
 });
