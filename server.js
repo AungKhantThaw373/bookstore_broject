@@ -155,23 +155,54 @@ app.get('/api/user', authenticateToken, async (req, res) => {
 });
 
 //Update profile
-app.put('/api/profile/update', authenticateToken, async (req, res) => {
-    const { username, email, profilePicUrl } = req.body;
+app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), async (req, res) => {
+    const { username, email, currentPassword, newPassword } = req.body;
 
     try {
-        // Update the user in the database
-        await db.none(
-            `UPDATE userz SET username=$1, email=$2, profile_pic_url=$3 WHERE id=$4`,
-            [username, email, profilePicUrl, req.user.id]
-        );
+        let profilePicUrl = null;
 
-        return res.json({ success: true, username, email, profile_pic_url: profilePicUrl });
+        if (req.file) {
+            const uploadPreset = 'ouum5xwe'; // Your unsigned upload preset
+
+            // Convert the file buffer to a stream and upload it to Cloudinary
+            const result = await new Promise((resolve, reject) => {
+                cloudinary.uploader.unsigned_upload(
+                    streamifier.createReadStream(req.file.buffer),
+                    uploadPreset,
+                    { folder: 'profile_pictures' },
+                    (error, result) => {
+                        if (error) {
+                            reject(error);
+                        } else {
+                            resolve(result);
+                        }
+                    }
+                );
+            });
+
+            profilePicUrl = result.secure_url;
+
+            // Update the user in the database
+            await db.none(
+                `UPDATE userz SET username=$1, email=$2, profile_pic_url=$3, password=$4 WHERE id=$5`,
+                [username, email, profilePicUrl, newPassword, req.user.id]
+            );
+
+            return res.json({ username, email, profile_pic_url: profilePicUrl });
+        } else {
+            // Update without changing the profile picture
+            await db.none(
+                `UPDATE userz SET username=$1, email=$2, password=$3 WHERE id=$4`,
+                [username, email, newPassword, req.user.id]
+            );
+
+            return res.json({ username, email });
+        }
     } catch (err) {
-        console.error('Profile update failed:', err);
+        console.error('Profile update error:', err);
         res.status(500).json({ error: 'Profile update failed' });
     }
 });
-
 
 // Get books
 app.get('/api/books', async (req, res) => {
