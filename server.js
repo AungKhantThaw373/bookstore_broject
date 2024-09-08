@@ -33,17 +33,8 @@ const db = pgp(process.env.DATABASE_URL);
 const allowedOrigins = ['http://localhost:5174', 'https://book-store-ykwq-afr3lm5yo-serenesophias-projects.vercel.app/']; // Add multiple origins here
 
 app.use(cors({
-    origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true // Ensure credentials is outside of the origin function
+    origin: '*', // Allows all origins
+    credentials: true // Ensures that credentials like cookies are included in requests
 }));
 
 app.use(bodyParser.json());
