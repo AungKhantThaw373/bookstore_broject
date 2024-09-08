@@ -30,7 +30,7 @@ app.listen(PORT, () => {
 
 const db = pgp(process.env.DATABASE_URL);
 
-const allowedOrigins = ['http://localhost:5174', 'https://web-project-07u1.onrender.com']; // Add multiple origins here
+const allowedOrigins = ['http://localhost:5174', 'https://book-store-ykwq-afr3lm5yo-serenesophias-projects.vercel.app/']; // Add multiple origins here
 
 app.use(cors({
     origin: function (origin, callback) {
