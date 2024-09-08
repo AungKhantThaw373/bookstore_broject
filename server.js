@@ -9,7 +9,6 @@ const jwt = require('jsonwebtoken');
 const PORT = process.env.PORT || 10000;
 const multer = require('multer');
 const streamifier = require('streamifier');
-const { Readable } = require('stream');
 const cloudinary = require('cloudinary').v2;
 
 // Cloudinary configuration
@@ -156,59 +155,63 @@ app.get('/api/user', authenticateToken, async (req, res) => {
 });
 
 //Update profile
-app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), async (req, res) => {
+const express = require('express');
+const multer = require('multer');
+const streamifier = require('streamifier');
+const cloudinary = require('cloudinary').v2;
+
+const app = express();
+const upload = multer();
+
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: 'your-cloud-name',
+    api_key: 'your-api-key',
+    api_secret: 'your-api-secret',
+});
+
+app.put('/api/profile/update', upload.single('profile_pic'), async (req, res) => {
     const { username, email, currentPassword, newPassword } = req.body;
 
     try {
         let profilePicUrl = null;
 
         if (req.file) {
-            const bufferStream = new Readable();
-            bufferStream.push(req.file.buffer);
-            bufferStream.push(null);
-
-            try {
-                const result = await new Promise((resolve, reject) => {
-                    cloudinary.uploader.unsigned_upload(bufferStream, 'ouum5xwe', (error, result) => {
-                        if (error) return reject(error);
-                        resolve(result);
-                    });
-                });
-
-                if (result.secure_url) {
-                    profilePicUrl = result.secure_url;
-                } else {
-                    throw new Error('Image upload failed');
-                }
-            } catch (uploadError) {
-                console.error('Cloudinary upload error:', uploadError);
-                return res.status(500).json({ error: 'Cloudinary upload failed' });
-            }
-        } else {
-            profilePicUrl = user?.profile_pic_url; // Retain existing profile picture URL if no new one is uploaded
-        }
-
-        // Update user information in the database
-        try {
-            await db.none(
-                `UPDATE userz SET username=$1, email=$2, profile_pic_url=$3 WHERE id=$4`,
-                [username, email, profilePicUrl, req.user.id]
+            // Convert Buffer to Stream using streamifier
+            const stream = cloudinary.uploader.unsigned_upload(
+                streamifier.createReadStream(req.file.buffer),
+                'ouum5xwe'
             );
 
-            res.json({
-                username,
-                email,
-                profile_pic_url: profilePicUrl,
+            // Handle the stream
+            const result = await new Promise((resolve, reject) => {
+                stream
+                    .on('error', reject)
+                    .on('finish', resolve)
+                    .end(req.file.buffer);
             });
-        } catch (dbError) {
-            console.error('Database update error:', dbError);
-            res.status(500).json({ error: 'Database update failed' });
+
+            profilePicUrl = result.secure_url;
         }
+
+        // Update user profile in the database
+        await db.none(
+            `UPDATE userz SET username=$1, email=$2, profile_pic_url=$3 WHERE id=$4`,
+            [username, email, profilePicUrl, req.user.id]
+        );
+
+        res.json({
+            username,
+            email,
+            profile_pic_url: profilePicUrl,
+        });
     } catch (err) {
-        console.error('Profile update failed:', err);
+        console.error('Profile update error:', err);
         res.status(500).json({ error: 'Profile update failed' });
     }
 });
+
+app.listen(3000, () => console.log('Server running on port 3000'));
 
 // Get books
 app.get('/api/books', async (req, res) => {
