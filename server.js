@@ -162,53 +162,33 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
         let profilePicUrl = null;
 
         if (req.file) {
-            const uploadStream = cloudinary.uploader.upload_stream(
-                { 
-                    folder: 'profile_pictures', 
-                    upload_preset: 'ouum5xwe' // Ensure this is an unsigned preset
-                },
-                async (error, result) => {
-                    if (error) {
-                        console.error('Cloudinary upload error:', error);
-                        return res.status(500).json({ error: 'Cloudinary upload failed' });
-                    }
+            // Use Cloudinary unsigned upload method
+            try {
+                const uploadRes = await cloudinary.uploader.unsigned_upload(req.file.buffer, 'ouum5xwe');
+                profilePicUrl = uploadRes.secure_url;
+            } catch (uploadError) {
+                console.error('Cloudinary unsigned upload error:', uploadError);
+                return res.status(500).json({ error: 'Cloudinary upload failed' });
+            }
+        } else {
+            profilePicUrl = user?.profile_pic_url; // Retain existing profile picture URL if no new one is uploaded
+        }
 
-                    profilePicUrl = result.secure_url;
-
-                    try {
-                        await db.none(
-                            `UPDATE userz SET username=$1, email=$2, profile_pic_url=$3 WHERE id=$4`,
-                            [username, email, profilePicUrl, req.user.id]
-                        );
-
-                        res.json({
-                            username,
-                            email,
-                            profile_pic_url: profilePicUrl,
-                        });
-                    } catch (dbError) {
-                        console.error('Database update error:', dbError);
-                        res.status(500).json({ error: 'Database update failed' });
-                    }
-                }
+        // Update user information in the database
+        try {
+            await db.none(
+                `UPDATE userz SET username=$1, email=$2, profile_pic_url=$3 WHERE id=$4`,
+                [username, email, profilePicUrl, req.user.id]
             );
 
-            streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
-        } else {
-            try {
-                await db.none(
-                    `UPDATE userz SET username=$1, email=$2 WHERE id=$3`,
-                    [username, email, req.user.id]
-                );
-
-                res.json({
-                    username,
-                    email,
-                });
-            } catch (dbError) {
-                console.error('Database update error:', dbError);
-                res.status(500).json({ error: 'Database update failed' });
-            }
+            res.json({
+                username,
+                email,
+                profile_pic_url: profilePicUrl,
+            });
+        } catch (dbError) {
+            console.error('Database update error:', dbError);
+            res.status(500).json({ error: 'Database update failed' });
         }
     } catch (err) {
         console.error('Profile update failed:', err);
