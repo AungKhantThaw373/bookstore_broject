@@ -157,6 +157,11 @@ app.get('/api/user', authenticateToken, async (req, res) => {
 
 //Update profile
 app.put('/api/profile/update', upload.single('profile_pic'), async (req, res) => {
+    console.log('Authenticated User:', req.user); // Debug log
+
+    if (!req.user || !req.user.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+    }
     const { username, email, currentPassword, newPassword } = req.body;
 
     try {
