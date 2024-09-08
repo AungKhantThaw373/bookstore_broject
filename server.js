@@ -162,14 +162,15 @@ app.put('/api/profile/update', upload.single('profile_pic'), async (req, res) =>
         let profilePicUrl = null;
 
         if (req.file) {
-            // Convert Buffer to Stream
-            const stream = streamifier.createReadStream(req.file.buffer);
+            // Convert Buffer to Base64
+            const base64Image = req.file.buffer.toString('base64');
+            const mimeType = req.file.mimetype; // e.g., image/jpeg
 
             // Use Cloudinary unsigned upload
             const result = await new Promise((resolve, reject) => {
                 cloudinary.uploader.unsigned_upload(
-                    stream,
-                    'your-upload-preset',
+                    `data:${mimeType};base64,${base64Image}`,
+                    'ouum5xwe',
                     { resource_type: 'image' },
                     (error, result) => {
                         if (error) return reject(error);
