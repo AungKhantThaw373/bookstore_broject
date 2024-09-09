@@ -30,7 +30,6 @@ app.listen(PORT, () => {
 
 const db = pgp(process.env.DATABASE_URL);
 
-const allowedOrigins = ['http://localhost:5174', 'https://book-store-ykwq-afr3lm5yo-serenesophias-projects.vercel.app/']; // Add multiple origins here
 
 app.use(cors({
     origin: '*', // Allows all origins
@@ -47,7 +46,7 @@ const authenticateToken = (req, res, next) => {
     if (!token) return res.sendStatus(401);
 
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err){
+        if (err) {
             console.error(err);
             return res.sendStatus(403);
         }
@@ -159,7 +158,7 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
     if (!req.user || !req.user.id) {
         return res.status(401).json({ error: 'User not authenticated' });
     }
-    
+
     const { username, email, currentPassword, newPassword } = req.body;
 
     console.log('Request Body:', { username, email, currentPassword, newPassword }); // Log the request body
@@ -214,6 +213,97 @@ app.put('/api/profile/update', authenticateToken, upload.single('profile_pic'), 
         console.error('Profile update error:', err); // Log errors
         res.status(500).json({ error: 'Profile update failed' });
     }
+});
+
+// Fetch reviews for a specific book with pagination
+app.get('/api/books/:id/reviews', (req, res) => {
+    const { id: book_id } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    // Ensure page and limit are integers
+    const pageNumber = parseInt(page, 10);
+    const reviewsPerPage = parseInt(limit, 10);
+
+    if (isNaN(pageNumber) || isNaN(reviewsPerPage)) {
+        return res.status(400).json({ error: 'Invalid page or limit' });
+    }
+
+    // Calculate the offset
+    const offset = (pageNumber - 1) * reviewsPerPage;
+
+    db.task(async t => {
+        // Fetch reviews for the specified book with pagination
+        const reviews = await t.any(`
+            SELECT r.review_id, r.content, r.created_at, u.username, u.profile_pic_url, r.likes
+            FROM reviews r
+            JOIN userz u ON r.user_id = u.id
+            WHERE r.book_id = $1
+            ORDER BY r.created_at DESC
+            LIMIT $2 OFFSET $3
+        `, [book_id, reviewsPerPage, offset]);
+
+        // Count the total number of reviews for pagination info
+        const totalReviews = await t.one(`
+            SELECT COUNT(*) as count
+            FROM reviews
+            WHERE book_id = $1
+        `, [book_id]);
+
+        return { reviews, totalReviews: totalReviews.count };
+    })
+        .then(data => {
+            res.json(data);
+        })
+        .catch(err => {
+            console.error(err);
+            res.status(500).json({ error: 'Failed to fetch reviews' });
+        });
+});
+
+
+// Update the likes of a review
+app.post('/api/reviews/:review_id/like', (req, res) => {
+    const { review_id } = req.params;
+
+    // Check if review_id is a valid integer
+    if (isNaN(parseInt(review_id, 10))) {
+        return res.status(400).json({ error: 'Invalid review ID' });
+    }
+
+    db.none(`
+        UPDATE reviews
+        SET likes = likes + 1
+        WHERE review_id = $1
+    `, [parseInt(review_id, 10)])
+        .then(() => {
+            res.json({ success: true });
+        })
+        .catch(err => {
+            console.error(err);
+            res.status(500).json({ error: 'Failed to like review' });
+        });
+});
+
+
+
+
+// Post a new review for a specific book
+app.post('/api/books/:id/reviews', authenticateToken, (req, res) => {
+    const { id: book_id } = req.params;
+    const { content } = req.body;
+    const user_id = req.user.id; // Assuming user_id is stored in req.user from the token
+
+    db.none(`
+        INSERT INTO reviews (book_id, user_id, content, created_at, updated_at)
+        VALUES ($1, $2, $3, NOW(), NOW())
+    `, [book_id, user_id, content])
+        .then(() => {
+            res.json({ message: 'Review added successfully!' });
+        })
+        .catch(err => {
+            console.error(err);
+            res.status(500).json({ error: 'Failed to post review' });
+        });
 });
 
 
